@@ -1,6 +1,6 @@
 # hexsdm: species distribution models over MCP
 
-Documentation: [boettiger-lab.github.io/glen-sdm](https://boettiger-lab.github.io/glen-sdm/), including [which data layers go into a model](https://boettiger-lab.github.io/glen-sdm/data-layers.html) and [all fit_sdm parameters](https://boettiger-lab.github.io/glen-sdm/usage.html).
+Documentation: [schmidtdse.github.io/hexsdm](https://schmidtdse.github.io/hexsdm/), including [which data layers go into a model](https://schmidtdse.github.io/hexsdm/data-layers.html) and [all fit_sdm parameters](https://schmidtdse.github.io/hexsdm/usage.html).
 
 An MCP server that fits species distribution models (SDMs) on demand from occurrence records and the habitat, climate and terrain layers in the [boettiger-lab STAC catalog](https://s3-west.nrp-nautilus.io/public-data/stac/catalog.json). It returns a suitability surface on the H3 grid, a range polygon, cross-validated performance, and optionally a projection under future climate. It is a companion to [mcp-data-server](https://github.com/boettiger-lab/mcp-data-server) and reads the same data the same way: DuckDB streaming H3-indexed parquet from S3.
 
@@ -102,7 +102,7 @@ Set `SDM_MODEL_THREADS`, `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` explicitly
 
 ## Known limitations
 
-- All predictors are terrestrial. A fit is refused when under half of the occupied cells in the study area are on land (marine species), unless `allow_offshore` is set; see [docs](https://boettiger-lab.github.io/glen-sdm/data-layers.html#marine-and-coastal-species).
+- All predictors are terrestrial. A fit is refused when under half of the occupied cells in the study area are on land (marine species), unless `allow_offshore` is set; see [docs](https://schmidtdse.github.io/hexsdm/data-layers.html#marine-and-coastal-species).
 - Results and job state live on one pod's disk. Multiple replicas need S3 results and job markers, as in mcp-data-server.
 - Continental runs are dominated by reading res-8 covariates in order to average them up. Precomputed coarse covariate stacks would remove most of that cost.
 - The extrapolation flag counts out-of-range covariates and is not a full MESS.

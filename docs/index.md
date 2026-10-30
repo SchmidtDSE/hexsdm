@@ -49,7 +49,7 @@ geo-agent apps list the server as an optional second MCP endpoint in `layers-inp
 ]
 ```
 
-To run the server locally, see the [README](https://github.com/boettiger-lab/glen-sdm#running).
+To run the server locally, see the [README](https://github.com/SchmidtDSE/hexsdm#running).
 
 ## Interpreting results
 
