@@ -8,6 +8,6 @@ relative_links:
   enabled: true
   collections: false
 aux_links:
-  GitHub: https://github.com/boettiger-lab/glen-sdm
+  GitHub: https://github.com/SchmidtDSE/hexsdm
 search_enabled: true
 heading_anchors: true
