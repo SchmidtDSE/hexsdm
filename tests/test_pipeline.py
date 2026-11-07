@@ -140,3 +140,21 @@ def test_marine_layer_sql_joins_variables_on_h6():
 def test_mode_ignores_missing_ranks():
     assert data._mode(pd.Series([None, None])) is None
     assert data._mode(pd.Series([None, "Testudines", "Testudines"])) == "Testudines"
+
+
+def test_connect_refuses_local_files_and_setting_changes():
+    import duckdb
+    import pytest
+    from hexsdm import data
+    con = data.connect()
+    try:
+        for sql in ["SELECT * FROM read_text('/etc/hostname')",
+                    "SELECT * FROM read_parquet('/etc/hostname')",
+                    "SELECT * FROM read_text('http://example.com/')",
+                    "SET enable_external_access=true",
+                    "SET memory_limit='100GB'"]:
+            with pytest.raises(duckdb.Error):
+                con.sql(sql).fetchall()
+        assert con.sql("SELECT h3_latlng_to_cell(37.8, -122.3, 8)").fetchone()[0] > 0
+    finally:
+        con.close()

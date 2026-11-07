@@ -12,6 +12,7 @@ import math
 import os
 import re
 import urllib.request
+import uuid
 from dataclasses import dataclass, field
 
 import duckdb
@@ -29,6 +30,9 @@ THREADS = int(os.environ.get("SDM_DUCKDB_THREADS", "32"))
 
 def connect() -> duckdb.DuckDBPyConnection:
     con = duckdb.connect(":memory:")
+    # Before any secret: otherwise DuckDB opens ~/.duckdb/stored_secrets on the
+    # first remote read, which the lock below refuses.
+    con.sql("SET allow_persistent_secrets=false")
     for ext in ("httpfs", "h3"):
         try:
             con.sql(f"LOAD {ext}")
@@ -39,7 +43,11 @@ def connect() -> duckdb.DuckDBPyConnection:
     con.sql("SET enable_progress_bar=false")
     if os.environ.get("DUCKDB_MEMORY_LIMIT"):
         con.sql(f"SET memory_limit='{os.environ['DUCKDB_MEMORY_LIMIT']}'")
-    con.sql("SET temp_directory='/tmp'")
+    # A private spill directory: concurrent connections sharing one directory
+    # overwrite each other's spill files. DuckDB creates it on first spill and
+    # removes it on close.
+    temp_dir = os.path.join(os.environ.get("DUCKDB_TEMP_ROOT", "/tmp"), f"duckdb-{uuid.uuid4().hex}")
+    con.sql(f"SET temp_directory={q(temp_dir)}")
     con.sql("SET preserve_insertion_order=false")
     con.sql("SET enable_object_cache=true")
     con.sql("SET enable_http_metadata_cache=true")
@@ -48,7 +56,26 @@ def connect() -> duckdb.DuckDBPyConnection:
         f"CREATE SECRET (TYPE S3, ENDPOINT '{S3_ENDPOINT}', URL_STYLE 'path', "
         f"USE_SSL {use_ssl}, KEY_ID '', SECRET '')"
     )
+    _lock_down(con, temp_dir)
     return con
+
+
+def _lock_down(con: duckdb.DuckDBPyConnection, temp_dir: str) -> None:
+    """Limit the connection to remote data plus its spill directory, then freeze
+    its configuration. Same lock as the geo-query MCP server (dbconfig.lock_down).
+
+    Caller input reaches SQL as paths (custom covariates, occurrence files), so
+    DuckDB itself must refuse anything that isn't remote data: local files,
+    plain http://, ATTACH, INSTALL. With the configuration locked, no later
+    statement can loosen this. s3:// reads still use the endpoint in the S3
+    secret above, including the internal endpoint over http.
+    """
+    con.sql("SET autoinstall_known_extensions=false")
+    con.sql("SET autoload_known_extensions=false")
+    con.sql("SET allow_community_extensions=false")
+    con.sql(f"SET allowed_directories=['s3://', 'https://', {q(temp_dir.rstrip('/') + '/')}]")
+    con.sql("SET enable_external_access=false")
+    con.sql("SET lock_configuration=true")
 
 
 def q(s: str) -> str:
