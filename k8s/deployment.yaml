@@ -16,6 +16,9 @@ spec:
       labels:
         app: sdm-mcp
     spec:
+      # No Kubernetes API token in the pod. The server never calls the
+      # Kubernetes API, and a readable token is a credential for no reason.
+      automountServiceAccountToken: false
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
