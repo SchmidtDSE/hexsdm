@@ -29,7 +29,7 @@ spec:
                     values: ["us-west"]
       containers:
       - name: server
-        image: ghcr.io/boettiger-lab/glen-sdm:main@sha256:f5a51673e3da3bda48317b72855a6f87fa1f15d35c313339ecbcd4e2675385d0
+        image: ghcr.io/schmidtdse/hexsdm:d5042400a7b0278f28897d01a1095891b97a2f58@sha256:70b3524286e6b7f630a635ac64804ef4dd7223775c469331a4ca30c9e0e63716
         imagePullPolicy: IfNotPresent
         env:
         - name: S3_DEFAULT_ENDPOINT          # in-cluster Ceph, plain http
