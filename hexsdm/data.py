@@ -362,11 +362,39 @@ def gbif_occurrences(con, spec: dict) -> tuple[pd.DataFrame, dict]:
     return df[df.n > 0].reset_index(drop=True), info
 
 
+GEOJSON_MAX_BYTES = 50 * 1024 * 1024
+
+
+class _HttpsOnlyRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.lower().startswith("https://"):
+            raise ValueError("occurrence GeoJSON URL redirected away from https://")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_geojson_opener = urllib.request.build_opener(_HttpsOnlyRedirects)
+
+
+def _fetch_geojson(url: str):
+    """GET a caller-supplied GeoJSON URL. https:// only, redirects included, so a
+    caller can't reach plain-http in-cluster services (the rule DuckDB's
+    allowed_directories applies to SQL paths), and capped in size."""
+    if not url.lower().startswith("https://"):
+        raise ValueError("occurrence GeoJSON URLs must start with https://")
+    with _geojson_opener.open(url, timeout=60) as r:
+        body = r.read(GEOJSON_MAX_BYTES + 1)
+    if len(body) > GEOJSON_MAX_BYTES:
+        raise ValueError(f"occurrence GeoJSON is larger than {GEOJSON_MAX_BYTES // 2**20} MB")
+    try:
+        return json.loads(body)
+    except ValueError:
+        raise ValueError("occurrence GeoJSON URL did not return JSON") from None
+
+
 def _points_from_geojson(gj) -> list[tuple[float, float, int]]:
     if isinstance(gj, str):
-        if gj.startswith("http"):
-            with urllib.request.urlopen(gj, timeout=60) as r:
-                gj = json.load(r)
+        if gj.lower().startswith(("http://", "https://")):
+            gj = _fetch_geojson(gj)
         else:
             gj = json.loads(gj)
     feats = gj["features"] if gj.get("type") == "FeatureCollection" else [gj]
