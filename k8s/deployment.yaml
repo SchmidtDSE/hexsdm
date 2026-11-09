@@ -19,6 +19,15 @@ spec:
       # No Kubernetes API token in the pod. The server never calls the
       # Kubernetes API, and a readable token is a credential for no reason.
       automountServiceAccountToken: false
+      # Non-root, as on geo-query (SchmidtDSE/geo-query#458). fsGroup lets the
+      # app user read the token Secret and write the emptyDir volumes.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -53,6 +62,14 @@ spec:
           value: "4"
         - name: DUCKDB_MEMORY_LIMIT
           value: "100GB"
+        # Bearer-token auth, as on geo-query (#453, #456): /mcp needs
+        # `Authorization: Bearer <token>`. /healthz and GET /results, /map and
+        # /tiles/hex stay public (their files are in public-output too). One
+        # token per app namespace, one key per token in the sdm-mcp-tokens
+        # Secret; apps add theirs server-side in their nginx. The server
+        # refuses to start if this directory yields no tokens.
+        - name: MCP_AUTH_TOKENS_DIR
+          value: /etc/mcp-tokens
         resources:
           # Small requests, high limits: same burstable pattern as mcp-data-server.
           requests:
@@ -63,9 +80,19 @@ spec:
             cpu: 48
         ports:
         - containerPort: 8000
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
         volumeMounts:
         - name: results
           mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        - name: mcp-tokens
+          mountPath: /etc/mcp-tokens
+          readOnly: true
         readinessProbe:
           httpGet: {path: /healthz, port: 8000}
           initialDelaySeconds: 10
@@ -81,3 +108,12 @@ spec:
       - name: results
         emptyDir:
           sizeLimit: 20Gi
+      # DuckDB spill space (one private directory per connection): the root
+      # filesystem is read-only.
+      - name: tmp
+        emptyDir:
+          sizeLimit: 50Gi
+      - name: mcp-tokens
+        secret:
+          secretName: sdm-mcp-tokens
+          defaultMode: 0440

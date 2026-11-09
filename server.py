@@ -25,9 +25,11 @@ import anyio
 import uvicorn
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from hexsdm import data, outputs, pipeline
+from hexsdm.auth import CALLER, load_tokens, match_token
 from hexsdm.models import ALGORITHM_INFO
 
 mcp = FastMCP(
@@ -190,6 +192,7 @@ def fit_sdm(
             "project_to": project_to, "allow_offshore": allow_offshore,
             "realm": realm, "allow_onshore": allow_onshore}
     spec = {k: v for k, v in spec.items() if v is not None}
+    print(f"fit_sdm [{CALLER.get()}]: {json.dumps(spec, default=str)[:500]}", file=sys.stderr, flush=True)
     try:
         rid, fut = _submit(spec)
     except Exception as e:
@@ -200,6 +203,9 @@ def fit_sdm(
 def get_sdm_result(run_id: str, wait_seconds: float = 30) -> dict:
     """Get the result of a fit_sdm run. Long-polls up to wait_seconds (max 120)
     while the run is in progress. Returns the same structure as fit_sdm."""
+    if not outputs.valid_run_id(run_id):
+        return {"status": "unknown", "run_id": run_id,
+                "error": "run_id must be the 16 hex characters returned by fit_sdm"}
     s = outputs.load_summary(run_id)
     if s:
         return {"status": "done", **_compact(s)}
@@ -262,7 +268,7 @@ ALLOWED = {"predictions.parquet", "projection.parquet", "range.geojson", "range_
 
 async def serve_result(request):
     rid, name = request.path_params["rid"], request.path_params["name"]
-    if name not in ALLOWED or not rid.isalnum():
+    if name not in ALLOWED or not outputs.valid_run_id(rid):
         return Response(status_code=404)
     p = outputs.OUTPUT_DIR / rid / name
     if not p.exists():
@@ -295,7 +301,7 @@ VIEWER = (Path(__file__).parent / "viewer.html").read_text()
 
 async def serve_map(request):
     rid = request.path_params["rid"]
-    if not rid.isalnum() or not outputs.load_summary(rid):
+    if not outputs.valid_run_id(rid) or not outputs.load_summary(rid):
         return HTMLResponse("<p>Unknown run id</p>", status_code=404)
     return HTMLResponse(VIEWER.replace("__RUN_ID__", rid))
 
@@ -304,13 +310,64 @@ async def healthz(_):
     return JSONResponse({"ok": True, "version": pipeline.VERSION})
 
 
-def build_app():
+# ---------------------------------------------------------------------------
+# Auth: named bearer tokens, as on geo-query (SchmidtDSE/geo-query#453, #456)
+# ---------------------------------------------------------------------------
+
+# Open without a token: the kubelet probe, and the GET routes that serve run
+# outputs. Those files are also in the public-output bucket, and browsers and
+# geo-agent map layers fetch their URLs directly. Everything else, /mcp
+# included, needs `Authorization: Bearer <token>`.
+_PUBLIC_GET_PREFIXES = ("/results/", "/map/", "/tiles/hex/")
+
+
+def _auth_tokens() -> dict[str, str]:
+    return load_tokens(os.environ.get("MCP_AUTH_TOKENS_DIR", "").strip(),
+                       os.environ.get("MCP_AUTH_TOKEN", ""))
+
+
+class _BearerAuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, tokens: dict[str, str]):
+        super().__init__(app)
+        self.tokens = tokens
+
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        if path == "/healthz" or (request.method == "GET" and path.startswith(_PUBLIC_GET_PREFIXES)):
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        supplied = auth[len("Bearer "):] if auth.startswith("Bearer ") else ""
+        caller = match_token(supplied, self.tokens)
+        if caller is None:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        reset = CALLER.set(caller)
+        try:
+            return await call_next(request)
+        finally:
+            CALLER.reset(reset)
+
+
+def build_app(tokens: dict[str, str] | None = None):
+    """The Starlette app. `tokens` (default: from the environment) turns on auth."""
     app = mcp.streamable_http_app()
     app.router.redirect_slashes = False
     app.add_route("/results/{rid}/{name}", serve_result, methods=["GET"])
     app.add_route("/map/{rid}", serve_map, methods=["GET"])
     app.add_route("/tiles/hex/{key}/{name}", serve_layer, methods=["GET"])
     app.add_route("/healthz", healthz, methods=["GET"])
+    if tokens is None:
+        tokens = _auth_tokens()
+        if os.environ.get("MCP_AUTH_TOKENS_DIR", "").strip() and not tokens:
+            # Fail closed: a configured but empty or unreadable token directory
+            # must not start an unauthenticated server.
+            print("MCP_AUTH_TOKENS_DIR is set but no tokens were loaded; refusing to "
+                  "start without auth.", file=sys.stderr)
+            sys.exit(1)
+    if tokens:
+        app.add_middleware(_BearerAuthMiddleware, tokens=tokens)
+        print(f"Auth enabled: {len(tokens)} token(s) ({', '.join(sorted(tokens))})", file=sys.stderr)
+    else:
+        print("Auth disabled (no MCP_AUTH_TOKENS_DIR or MCP_AUTH_TOKEN)", file=sys.stderr)
     return app
 
 

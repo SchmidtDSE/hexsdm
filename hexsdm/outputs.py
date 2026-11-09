@@ -21,6 +21,7 @@ from __future__ import annotations
 import gzip
 import json
 import os
+import re
 import urllib.request
 from pathlib import Path
 
@@ -89,7 +90,19 @@ def store(rel: str, body: bytes | str, content_type: str, gzip_on_s3: bool = Fal
     return public_url(rel)
 
 
+# Run ids are the first 16 hex digits of a SHA-256 (pipeline.run_id). Anything
+# else is refused before it reaches a path or URL: a caller-supplied run_id such
+# as "../x" or "/etc" would otherwise read, fetch and write outside OUTPUT_DIR.
+_RUN_ID = re.compile(r"[0-9a-f]{16}")
+
+
+def valid_run_id(rid) -> bool:
+    return isinstance(rid, str) and _RUN_ID.fullmatch(rid) is not None
+
+
 def load_summary(rid: str) -> dict | None:
+    if not valid_run_id(rid):
+        return None
     p = OUTPUT_DIR / rid / "summary.json"
     if p.exists():
         return json.loads(p.read_text())
