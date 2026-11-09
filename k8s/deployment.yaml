@@ -38,7 +38,7 @@ spec:
                     values: ["us-west"]
       containers:
       - name: server
-        image: ghcr.io/schmidtdse/hexsdm:d5042400a7b0278f28897d01a1095891b97a2f58@sha256:70b3524286e6b7f630a635ac64804ef4dd7223775c469331a4ca30c9e0e63716
+        image: ghcr.io/schmidtdse/hexsdm:60277b0cd76cbf2d1ea06221a2206a3e8e81bb62@sha256:3c2e18c222e0cb0db471cad64c12fdf93544fcee8121cdc3a6119e8eaa51327d
         imagePullPolicy: IfNotPresent
         env:
         - name: S3_DEFAULT_ENDPOINT          # in-cluster Ceph, plain http
