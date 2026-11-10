@@ -41,8 +41,12 @@ spec:
         image: ghcr.io/schmidtdse/hexsdm:60277b0cd76cbf2d1ea06221a2206a3e8e81bb62@sha256:3c2e18c222e0cb0db471cad64c12fdf93544fcee8121cdc3a6119e8eaa51327d
         imagePullPolicy: IfNotPresent
         env:
-        - name: S3_DEFAULT_ENDPOINT          # in-cluster Ceph, plain http
-          value: "rook-ceph-rgw-nautiluss3.rook"
+        # NRP Ceph through its external https endpoint, not the internal RGW:
+        # the egress NetworkPolicy on this pod (SchmidtDSE/geo-query
+        # k8s/mcp-egress-networkpolicy.yaml) allows only DNS and public https.
+        # Return to rook-ceph-rgw-nautiluss3.rook when an internal-RGW rule is added.
+        - name: S3_DEFAULT_ENDPOINT
+          value: "s3-west.nrp-nautilus.io"
         - name: SDM_PUBLIC_BASE_URL
           value: "https://sdm-mcp.nrp-nautilus.io"
         - name: SDM_OUTPUT_DIR
