@@ -1,0 +1,54 @@
+# Egress for sdm-mcp, the hexsdm MCP server (k8s/deployment.yaml).
+#
+# The server runs model fits and SQL on its callers' behalf, so what the pod can
+# reach is what a request can reach. It gets DNS and https to public addresses
+# (NRP S3 through its external endpoint, and public-output for results). Nothing
+# in the cluster.
+#
+# Keep public 443 rather than pinning to the NRP ingress address: pinning broke
+# reads on 2026-11-10.
+#
+# Apply with `kubectl apply -f k8s/mcp-egress-networkpolicy.yaml`.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sdm-mcp-egress
+  namespace: biodiversity
+spec:
+  podSelector:
+    matchLabels:
+      app: sdm-mcp
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 100.64.0.0/10
+              - 169.254.0.0/16
+              - 127.0.0.0/8
+        - ipBlock:
+            cidr: ::/0
+            except:
+              - fc00::/7
+              - fe80::/10
+              - ::1/128
+      ports:
+        - protocol: TCP
+          port: 443

@@ -42,8 +42,8 @@ spec:
         imagePullPolicy: IfNotPresent
         env:
         # NRP Ceph through its external https endpoint, not the internal RGW:
-        # the egress NetworkPolicy on this pod (SchmidtDSE/geo-query
-        # k8s/mcp-egress-networkpolicy.yaml) allows only DNS and public https.
+        # the egress NetworkPolicy on this pod (k8s/mcp-egress-networkpolicy.yaml)
+        # allows only DNS and public https.
         # Return to rook-ceph-rgw-nautiluss3.rook when an internal-RGW rule is added.
         - name: S3_DEFAULT_ENDPOINT
           value: "s3-west.nrp-nautilus.io"
