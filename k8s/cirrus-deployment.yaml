@@ -1,0 +1,123 @@
+# sdm-mcp on cirrus (k3s), beside geo-query's mirror head (SchmidtDSE/geo-query
+# k8s/cirrus-*.yaml). Same image, settings and resources as k8s/deployment.yaml on
+# NRP; it reads and writes NRP S3 over its public https endpoint, so results are
+# the same objects in public-output either way.
+#
+# The bearer token Secret is copied from NRP, so global-30x30's SDM_AUTH_TOKEN works
+# unchanged (prints nothing):
+#   kubectl --context nautilus -n biodiversity get secret sdm-mcp-tokens -o json \
+#     | jq '{apiVersion, kind, type, data, metadata: {name: .metadata.name, namespace: "mcp"}}' \
+#     | kubectl --context cirrus apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdm-mcp
+  namespace: mcp
+spec:
+  # One replica for the first pass: run results and job state live on the pod's
+  # disk. Scaling out needs SDM_OUTPUT_S3 (shared results) plus S3 job markers,
+  # as mcp-data-server does for hex tile builds.
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sdm-mcp
+  template:
+    metadata:
+      labels:
+        app: sdm-mcp
+    spec:
+      # No Kubernetes API token in the pod. The server never calls the
+      # Kubernetes API, and a readable token is a credential for no reason.
+      automountServiceAccountToken: false
+      # Non-root, as on geo-query (SchmidtDSE/geo-query#458). fsGroup lets the
+      # app user read the token Secret and write the emptyDir volumes.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      nodeSelector:
+        kubernetes.io/hostname: cirrus
+      containers:
+      - name: server
+        image: ghcr.io/schmidtdse/hexsdm:62ed15d8a88010f9521188e30396454c889e155c@sha256:21d5a73b8f767ad4958e7c17021fd3c286aab808bb4af9fba8668cd37e706fd7
+        imagePullPolicy: IfNotPresent
+        env:
+        # NRP Ceph through its public https endpoint, the only S3 host
+        # k8s/cirrus-networkpolicy.yaml lets this pod reach.
+        - name: S3_DEFAULT_ENDPOINT
+          value: "s3-west.nrp-nautilus.io"
+        - name: SDM_OUTPUT_DIR
+          value: "/data/sdm-output"
+        - name: SDM_OUTPUT_S3                # enables hex-tile hand-off to mcp-data-server
+          value: "s3://public-output/sdm"
+        - name: SDM_DUCKDB_THREADS
+          value: "64"
+        # Measured on NRP (docs/benchmarks.md): more threads made fits slower.
+        # BRT took 10 s at 32 threads vs 1.8 s at 8; MaxEnt 9.3 s with OpenBLAS
+        # unset (it grabs every core) vs 3.5 s at 4.
+        - name: SDM_MODEL_THREADS
+          value: "8"
+        - name: OMP_NUM_THREADS
+          value: "8"
+        - name: OPENBLAS_NUM_THREADS
+          value: "4"
+        - name: DUCKDB_MEMORY_LIMIT
+          value: "100GB"
+        # Bearer-token auth, as on geo-query (#453, #456): /mcp needs
+        # `Authorization: Bearer <token>`. /healthz and GET /results, /map and
+        # /tiles/hex stay public (their files are in public-output too). One
+        # token per app namespace, one key per token in the sdm-mcp-tokens
+        # Secret; apps add theirs server-side in their nginx. The server
+        # refuses to start if this directory yields no tokens.
+        - name: MCP_AUTH_TOKENS_DIR
+          value: /etc/mcp-tokens
+        resources:
+          # Small requests, high limits: same burstable pattern as mcp-data-server.
+          requests:
+            memory: 2Gi
+            cpu: 500m
+          limits:
+            memory: 128Gi
+            cpu: 48
+        ports:
+        - containerPort: 8000
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: results
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        - name: mcp-tokens
+          mountPath: /etc/mcp-tokens
+          readOnly: true
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8000}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet: {path: /healthz, port: 8000}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: results
+        emptyDir:
+          sizeLimit: 20Gi
+      # DuckDB spill space (one private directory per connection): the root
+      # filesystem is read-only.
+      - name: tmp
+        emptyDir:
+          sizeLimit: 50Gi
+      - name: mcp-tokens
+        secret:
+          secretName: sdm-mcp-tokens
+          defaultMode: 0440

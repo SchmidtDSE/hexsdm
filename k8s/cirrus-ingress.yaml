@@ -1,0 +1,32 @@
+# Public hostname on cirrus. Assumes cert-manager (letsencrypt-production) and
+# external-dns (Cloudflare, carlboettiger.info) as for geo-query's
+# duckdb-mcp.carlboettiger.info. Every MCP request needs the bearer token; apps
+# call it server-side from their own nginx (global-30x30: /api/sdm), so no CORS
+# middleware: no browser calls it directly. The long-timeout ServersTransport is
+# geo-query's, already in this namespace (geo-query k8s/cirrus-middleware.yaml).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sdm-mcp
+  namespace: mcp
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    traefik.ingress.kubernetes.io/service.servertransport: mcp-mcp-long-timeout@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: sdm-mcp.carlboettiger.info
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sdm-mcp
+                port:
+                  number: 8000
+  tls:
+    - hosts:
+        - sdm-mcp.carlboettiger.info
+      secretName: sdm-mcp-tls
