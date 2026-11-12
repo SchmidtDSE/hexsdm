@@ -53,9 +53,8 @@ spec:
           type: RuntimeDefault
       containers:
       - name: server
-        # Needs S3_DEFAULT_USE_SSL support (this change); pin the digest CI
-        # builds from the merge commit before applying.
-        image: ghcr.io/schmidtdse/hexsdm:REPLACE_WITH_MERGE_SHA@sha256:REPLACE_WITH_DIGEST
+        # Built from 2a9e4c5 (#24). Pinned by digest.
+        image: ghcr.io/schmidtdse/hexsdm:2a9e4c53002d7dbe4610b1f346583863cb0fb359@sha256:d13aa01fb98d82a14d99bafe9888cd931dce3e6633c1656e4a00e2417dbc3ea5
         imagePullPolicy: IfNotPresent
         env:
         # In-cluster MinIO: bare host, plain http, path-style, anonymous reads.
