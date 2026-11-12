@@ -395,9 +395,50 @@ def _fetch_geojson(url: str):
         raise ValueError("occurrence GeoJSON URL did not return JSON") from None
 
 
+# Public https prefixes of this deployment's own S3 store (comma-separated,
+# path-style). Occurrence GeoJSON URLs under them are read as s3:// through the
+# deployment's endpoint instead of fetched over https: on cirrus the pod reaches
+# MinIO in-cluster but not its public host.
+S3_HTTPS_PREFIXES = [p.strip().rstrip("/") + "/" for p in
+                     os.environ.get("SDM_S3_HTTPS_PREFIXES", "").split(",") if p.strip()]
+
+
+def _as_s3_path(url: str) -> str | None:
+    if url.lower().startswith("s3://"):
+        return url
+    for prefix in S3_HTTPS_PREFIXES:
+        if url.startswith(prefix):
+            return "s3://" + url[len(prefix):]
+    return None
+
+
+def _read_s3_geojson(path: str):
+    """Read one GeoJSON object from S3 through a locked DuckDB connection, so it
+    goes to the deployment's endpoint and nowhere else. No globs: one file."""
+    if any(c in path for c in "*?[]{}"):
+        raise ValueError("occurrence GeoJSON s3:// paths must name a single file")
+    con = connect()
+    try:
+        rows = con.execute("SELECT size FROM read_blob(?)", [path]).fetchall()
+        if not rows:
+            raise ValueError(f"occurrence GeoJSON not found: {path}")
+        if rows[0][0] > GEOJSON_MAX_BYTES:
+            raise ValueError(f"occurrence GeoJSON is larger than {GEOJSON_MAX_BYTES // 2**20} MB")
+        body = con.execute("SELECT content FROM read_blob(?)", [path]).fetchone()[0]
+    finally:
+        con.close()
+    try:
+        return json.loads(body)
+    except ValueError:
+        raise ValueError("occurrence GeoJSON path did not hold JSON") from None
+
+
 def _points_from_geojson(gj) -> list[tuple[float, float, int]]:
     if isinstance(gj, str):
-        if gj.lower().startswith(("http://", "https://")):
+        s3_path = _as_s3_path(gj)
+        if s3_path:
+            gj = _read_s3_geojson(s3_path)
+        elif gj.lower().startswith(("http://", "https://")):
             gj = _fetch_geojson(gj)
         else:
             gj = json.loads(gj)
@@ -416,7 +457,7 @@ def _points_from_geojson(gj) -> list[tuple[float, float, int]]:
 
 def user_occurrences(spec: dict) -> pd.DataFrame:
     """User-supplied points -> per-h8 counts. Accepts:
-      {"geojson": FeatureCollection | URL}  (property presence=0 marks an absence)
+      {"geojson": FeatureCollection | https URL | s3:// path}  (property presence=0 marks an absence)
       {"points": [[lon, lat], ...], "absences": [[lon, lat], ...]}
     """
     pts: list[tuple[float, float, int]] = []

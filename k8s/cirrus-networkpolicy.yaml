@@ -4,8 +4,9 @@
 # The server runs model fits and SQL on its callers' behalf, so what the pod can
 # reach is what a request can reach. Egress: cluster DNS and the in-cluster
 # MinIO S3 API, nothing else. Not the internet, not other in-cluster services,
-# not the public minio.carlboettiger.info host. Consequence: occurrence GeoJSON
-# given as an https:// URL cannot be fetched here; callers pass it inline.
+# not the public minio.carlboettiger.info host. Occurrence GeoJSON therefore
+# comes inline, as an s3:// path, or as a minio.carlboettiger.info link (read
+# in-cluster); other https URLs cannot be fetched here.
 #
 # Ingress: only Traefik (kube-system) on 8000. Kubelet probes come from the node
 # itself, which kube-router always admits.
