@@ -38,7 +38,7 @@ spec:
                     values: ["us-west"]
       containers:
       - name: server
-        image: ghcr.io/schmidtdse/hexsdm:60277b0cd76cbf2d1ea06221a2206a3e8e81bb62@sha256:3c2e18c222e0cb0db471cad64c12fdf93544fcee8121cdc3a6119e8eaa51327d
+        image: ghcr.io/schmidtdse/hexsdm:62ed15d8a88010f9521188e30396454c889e155c@sha256:21d5a73b8f767ad4958e7c17021fd3c286aab808bb4af9fba8668cd37e706fd7
         imagePullPolicy: IfNotPresent
         env:
         # NRP Ceph through its external https endpoint, not the internal RGW:
@@ -47,8 +47,6 @@ spec:
         # Return to rook-ceph-rgw-nautiluss3.rook when an internal-RGW rule is added.
         - name: S3_DEFAULT_ENDPOINT
           value: "s3-west.nrp-nautilus.io"
-        - name: SDM_PUBLIC_BASE_URL
-          value: "https://sdm-mcp.nrp-nautilus.io"
         - name: SDM_OUTPUT_DIR
           value: "/data/sdm-output"
         - name: SDM_OUTPUT_S3                # enables hex-tile hand-off to mcp-data-server
