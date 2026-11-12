@@ -85,7 +85,7 @@ claude mcp add --transport http hex-sdm http://localhost:8001/mcp
 
 Set `SDM_MODEL_THREADS`, `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` explicitly on shared nodes (8, 8 and 4 on NRP). Without it, LightGBM and BLAS see every core on the node, and the oversubscription made fits about 10× slower in testing.
 
-`k8s/` holds a single-replica Deployment, Service and Ingress for NRP, using the same burstable resource pattern as mcp-data-server.
+`k8s/` holds a single-replica Deployment, Service and egress NetworkPolicy for NRP, with no Ingress, using the same burstable resource pattern as mcp-data-server.
 
 ## Open questions for reviewers
 
