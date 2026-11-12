@@ -1,0 +1,137 @@
+# sdm-mcp on the lab's k3s cluster (cirrus), alongside the NRP deployment
+# (deployment.yaml). Modelled on geo-query's cirrus recipe
+# (SchmidtDSE/geo-query k8s/cirrus-deployment.yaml): it runs in the `mcp`
+# namespace next to duckdb-mcp, is pinned to the cirrus node, and reads the
+# in-cluster MinIO mirror of the NRP buckets instead of NRP Ceph, so data
+# traffic stays on-node.
+#
+# Locked down like geo-query on cirrus:
+# - bearer-token auth on /mcp from the sdm-mcp-tokens Secret (one key per caller);
+# - non-root, read-only root filesystem, no capabilities, no service-account token;
+# - every DuckDB connection is locked to s3:// and https:// reads (hexsdm/data.py);
+# - cirrus-networkpolicy.yaml allows egress only to MinIO and cluster DNS, and
+#   ingress only from Traefik.
+#
+# Results stay on the pod and are served by its own GET routes (/results, /map,
+# /tiles/hex) through cirrus-ingress.yaml. SDM_OUTPUT_S3 is unset: MinIO's
+# public-output is 30-day scratch, and reading results back through the public
+# host would need egress the policy refuses.
+#
+# The token Secret must exist before applying (never commit a token):
+#   kubectl -n mcp create secret generic sdm-mcp-tokens \
+#     --from-literal=default="$(openssl rand -hex 32)"
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdm-mcp
+  namespace: mcp
+spec:
+  # One replica: run results and job state live on the pod's disk.
+  replicas: 1
+  # A second pod would not see the first one's results; replace, don't overlap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: sdm-mcp
+  template:
+    metadata:
+      labels:
+        app: sdm-mcp
+    spec:
+      # MinIO and Traefik both run on cirrus; co-locating keeps S3 reads on-node.
+      nodeSelector:
+        kubernetes.io/hostname: cirrus
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: server
+        # Needs S3_DEFAULT_USE_SSL support (this change); pin the digest CI
+        # builds from the merge commit before applying.
+        image: ghcr.io/schmidtdse/hexsdm:REPLACE_WITH_MERGE_SHA@sha256:REPLACE_WITH_DIGEST
+        imagePullPolicy: IfNotPresent
+        env:
+        # In-cluster MinIO: bare host, plain http, path-style, anonymous reads.
+        # Bucket names match NRP, refreshed by the weekly NRP→MinIO sync.
+        # MinIO is moving to RustFS: at cutover switch this to
+        # rustfs-s3.rustfs.svc.cluster.local:9000 together with the egress rule
+        # in cirrus-networkpolicy.yaml.
+        - name: S3_DEFAULT_ENDPOINT
+          value: "minio-svc.minio.svc.cluster.local:9000"
+        - name: S3_DEFAULT_USE_SSL
+          value: "false"
+        - name: SDM_PUBLIC_BASE_URL
+          value: "https://sdm-mcp.carlboettiger.info"
+        - name: SDM_OUTPUT_DIR
+          value: "/data/sdm-output"
+        - name: SDM_DUCKDB_THREADS
+          value: "32"
+        # Same model thread caps as NRP (docs/benchmarks.md): more threads made
+        # fits slower.
+        - name: SDM_MODEL_THREADS
+          value: "8"
+        - name: OMP_NUM_THREADS
+          value: "8"
+        - name: OPENBLAS_NUM_THREADS
+          value: "4"
+        # Below the 64Gi limit, leaving room for model fits outside DuckDB.
+        - name: DUCKDB_MEMORY_LIMIT
+          value: "48GB"
+        - name: MCP_AUTH_TOKENS_DIR
+          value: /etc/mcp-tokens
+        resources:
+          # cirrus has 128 CPU / ~251Gi, shared with duckdb-mcp (2 × 96Gi limits),
+          # gpu-mcp and JupyterHub.
+          requests:
+            memory: 2Gi
+            cpu: 250m
+          limits:
+            memory: 64Gi
+            cpu: 32
+            ephemeral-storage: 70Gi
+        ports:
+        - containerPort: 8000
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: results
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+        - name: mcp-tokens
+          mountPath: /etc/mcp-tokens
+          readOnly: true
+        # /healthz never touches S3, so a MinIO outage cannot crashloop the pod.
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8000}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 3
+        livenessProbe:
+          httpGet: {path: /healthz, port: 8000}
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 6
+      volumes:
+      - name: results
+        emptyDir:
+          sizeLimit: 20Gi
+      # DuckDB spill space: the root filesystem is read-only.
+      - name: tmp
+        emptyDir:
+          sizeLimit: 50Gi
+      # Each key becomes /etc/mcp-tokens/<caller-name>.
+      - name: mcp-tokens
+        secret:
+          secretName: sdm-mcp-tokens
+          defaultMode: 0440

@@ -59,9 +59,9 @@ def public_url(rel: str) -> str:
 
 def _s3_put(rel: str, body: bytes, content_type: str, gzipped: bool = False) -> None:
     """Anonymous PUT to the deployment's S3 endpoint (public-output allows it in-cluster)."""
-    from .data import S3_ENDPOINT
+    from .data import S3_ENDPOINT, S3_USE_SSL
     bucket, prefix = _s3_parts()
-    scheme = "http" if S3_ENDPOINT.startswith("rook") else "https"
+    scheme = "https" if S3_USE_SSL else "http"
     key = f"{prefix + '/' if prefix else ''}{rel}"
     headers = {"Content-Type": content_type}
     if gzipped:

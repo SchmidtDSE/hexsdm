@@ -1,0 +1,36 @@
+# HTTPS entry for sdm-mcp on cirrus, as geo-query's cirrus-ingress.yaml.
+# /mcp needs a bearer token; /healthz, and GET /results, /map and /tiles/hex
+# are public so result links open in a browser.
+#
+# Reuses the mcp-cors Middleware and mcp-long-timeout ServersTransport that
+# geo-query's cirrus-middleware.yaml declares in this namespace.
+# external-dns creates the DNS record (DNS-only, not proxied, so long MCP
+# streams aren't cut) and leaves it behind if this Ingress is deleted;
+# cert-manager mints the TLS cert.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sdm-mcp-ingress
+  namespace: mcp
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    traefik.ingress.kubernetes.io/router.middlewares: mcp-mcp-cors@kubernetescrd
+    traefik.ingress.kubernetes.io/service.servertransport: mcp-mcp-long-timeout@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: sdm-mcp.carlboettiger.info
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sdm-mcp
+                port:
+                  number: 8000
+  tls:
+    - hosts:
+        - sdm-mcp.carlboettiger.info
+      secretName: sdm-mcp-tls

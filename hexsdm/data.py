@@ -25,6 +25,10 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 
 S3_ENDPOINT = os.environ.get("S3_DEFAULT_ENDPOINT", "s3-west.nrp-nautilus.io")
+# http for in-cluster endpoints: NRP's internal RGW (rook*) by default, or any
+# endpoint with S3_DEFAULT_USE_SSL=false (in-cluster MinIO on cirrus).
+S3_USE_SSL = (os.environ.get("S3_DEFAULT_USE_SSL")
+              or ("false" if S3_ENDPOINT.startswith("rook") else "true")).strip().lower() != "false"
 THREADS = int(os.environ.get("SDM_DUCKDB_THREADS", "32"))
 
 
@@ -51,7 +55,7 @@ def connect() -> duckdb.DuckDBPyConnection:
     con.sql("SET preserve_insertion_order=false")
     con.sql("SET enable_object_cache=true")
     con.sql("SET enable_http_metadata_cache=true")
-    use_ssl = "false" if S3_ENDPOINT.startswith("rook") else "true"
+    use_ssl = "true" if S3_USE_SSL else "false"
     con.sql(
         f"CREATE SECRET (TYPE S3, ENDPOINT '{S3_ENDPOINT}', URL_STYLE 'path', "
         f"USE_SSL {use_ssl}, KEY_ID '', SECRET '')"
