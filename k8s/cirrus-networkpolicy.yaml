@@ -61,6 +61,18 @@ spec:
     ports:
     - port: 9000
       protocol: TCP
+  # rustfs-s3, MinIO's replacement (boettiger-lab/k8s platform/rustfs). At the
+  # cutover minio-svc becomes an alias of it, so this rule must be in place first.
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: rustfs
+      podSelector:
+        matchLabels:
+          app: rustfs-s3
+    ports:
+    - port: 9000
+      protocol: TCP
   # After the RustFS cutover, in place of the MinIO rule:
   # - to:
   #   - namespaceSelector:
