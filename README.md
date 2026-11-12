@@ -87,6 +87,8 @@ Set `SDM_MODEL_THREADS`, `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` explicitly
 
 `k8s/` holds a single-replica Deployment, Service and egress NetworkPolicy for NRP, with no Ingress, using the same burstable resource pattern as mcp-data-server.
 
+`k8s/cirrus-*.yaml` deploy a second copy on the lab's k3s cluster (cirrus), next to geo-query in the `mcp` namespace. It reads the in-cluster MinIO mirror of the same buckets over plain http (`S3_DEFAULT_ENDPOINT`, `S3_DEFAULT_USE_SSL=false`), its NetworkPolicy allows egress only to MinIO and cluster DNS, and it is served at https://sdm-mcp.carlboettiger.info behind the same bearer-token auth. Results stay on the pod and are served by its own routes, so occurrence GeoJSON must be passed inline rather than as a URL.
+
 ## Open questions for reviewers
 
 - **Defaults.** Are these right for a general-purpose tool?
