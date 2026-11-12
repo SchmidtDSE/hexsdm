@@ -68,7 +68,7 @@ Each run stores these files, on S3 when `SDM_OUTPUT_S3` is set (as in the NRP de
 - `map_layers`: arguments for geo-agent's existing `add_hex_tile_layer` tool, with `format="geojson"`.
   - The suitability surface is coarsened to the finest H3 resolution with at most 40,000 cells; see [docs/benchmarks.md](docs/benchmarks.md#map-display-hex-tiles-or-geojson) for why GeoJSON rather than tiles at that size.
   - The range polygon is a second layer.
-- `/map/<run_id>`: a standalone viewer (MapLibre and deck.gl) with full-resolution hexes, range polygon, presences, CV metrics, and a current/future toggle.
+- `/map/<run_id>`: a standalone viewer (MapLibre and deck.gl) with full-resolution hexes, range polygon, presences, CV metrics, and a current/future toggle. The result links to it as `map` only where the server is reachable: locally, or when `SDM_PUBLIC_BASE_URL` is set. The NRP deployment has no public address, so it returns no `map` link.
 - `predictions.parquet`: one row per cell, with the H3 index, ensemble suitability, binary range, per-model predictions and an extrapolation count.
 - `range.geojson`: the range polygon.
 - `summary.json`: the full specification, metrics, variable importance and timings.
@@ -85,7 +85,7 @@ claude mcp add --transport http hex-sdm http://localhost:8001/mcp
 
 Set `SDM_MODEL_THREADS`, `OMP_NUM_THREADS` and `OPENBLAS_NUM_THREADS` explicitly on shared nodes (8, 8 and 4 on NRP). Without it, LightGBM and BLAS see every core on the node, and the oversubscription made fits about 10× slower in testing.
 
-`k8s/` holds a single-replica Deployment, Service and Ingress for NRP, using the same burstable resource pattern as mcp-data-server.
+`k8s/` holds a single-replica Deployment, Service and egress NetworkPolicy for NRP, with no Ingress, using the same burstable resource pattern as mcp-data-server.
 
 ## Open questions for reviewers
 

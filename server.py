@@ -61,8 +61,8 @@ def _compact(summary: dict) -> dict:
     out["next_step"] = (
         "To display on a geo-agent map, call add_hex_tile_layer with the arguments in "
         "artifacts.map_layers.suitability, then again with artifacts.map_layers.range "
-        "(second, so the range draws on top), passing both exactly as given. Otherwise "
-        "link the user to artifacts.map. For full resolution tiles, pass "
+        "(second, so the range draws on top), passing both exactly as given. Otherwise, "
+        "if artifacts.map is present, link the user to it. For full resolution tiles, pass "
         "artifacts.hex_tiles.sql/agg to register_hex_tiles. When describing where the "
         "species is predicted to occur, use range_by_region (suitable area by admin "
         "region, from this model) rather than prior knowledge of the species."

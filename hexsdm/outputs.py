@@ -31,7 +31,11 @@ import pandas as pd
 
 OUTPUT_DIR = Path(os.environ.get("SDM_OUTPUT_DIR", "./sdm-output")).resolve()
 OUTPUT_S3 = os.environ.get("SDM_OUTPUT_S3", "").rstrip("/")
-PUBLIC_BASE = os.environ.get("SDM_PUBLIC_BASE_URL", "http://localhost:8001").rstrip("/")
+# Where this server's own GET routes (/results, /map, /tiles) are reachable. Unset on NRP,
+# where the server has no public address: file links then point at S3, and no map link
+# is returned.
+PUBLIC_BASE_SET = bool(os.environ.get("SDM_PUBLIC_BASE_URL", "").strip())
+PUBLIC_BASE = os.environ.get("SDM_PUBLIC_BASE_URL", "").strip().rstrip("/") or "http://localhost:8001"
 S3_PUBLIC_HTTP = os.environ.get("SDM_OUTPUT_S3_HTTP", "https://s3-west.nrp-nautilus.io").rstrip("/")
 POLYGON_MAX_CELLS = int(os.environ.get("SDM_POLYGON_MAX_CELLS", "12000"))
 DISPLAY_MAX_CELLS = int(os.environ.get("SDM_DISPLAY_MAX_CELLS", "40000"))
@@ -221,8 +225,9 @@ def write_all(rid: str, pred: pd.DataFrame, proj: pd.DataFrame | None, res: int,
 
     buf = pred.rename(columns={"cell": col}).to_parquet(index=False)
     art = {"predictions_parquet": store(f"{rid}/predictions.parquet", buf, "application/vnd.apache.parquet"),
-           "map": f"{PUBLIC_BASE}/map/{rid}",
            "summary": public_url(f"{rid}/summary.json")}
+    if PUBLIC_BASE_SET or not OUTPUT_S3:
+        art["map"] = f"{PUBLIC_BASE}/map/{rid}"
 
     gj, pres = range_polygon(pred.cell[pred.suitable].to_numpy(), res)
     art["range_geojson"] = store(f"{rid}/range.geojson", json.dumps(gj), "application/geo+json")
