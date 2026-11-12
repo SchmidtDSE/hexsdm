@@ -12,10 +12,11 @@
 # - cirrus-networkpolicy.yaml allows egress only to MinIO and cluster DNS, and
 #   ingress only from Traefik.
 #
-# Results stay on the pod and are served by its own GET routes (/results, /map,
-# /tiles/hex) through cirrus-ingress.yaml. SDM_OUTPUT_S3 is unset: MinIO's
-# public-output is 30-day scratch, and reading results back through the public
-# host would need egress the policy refuses.
+# Results go to MinIO's public-output/sdm, as on NRP: anonymous PUT through the
+# in-cluster endpoint, links on the public host. public-output is scratch
+# (30-day lifecycle, 100 GiB quota), so result links expire after 30 days.
+# Occurrence GeoJSON can be read from MinIO too, as an s3:// path or a
+# minio.carlboettiger.info link (SDM_S3_HTTPS_PREFIXES).
 #
 # The token Secret must exist before applying (never commit a token):
 #   kubectl -n mcp create secret generic sdm-mcp-tokens \
@@ -70,6 +71,16 @@ spec:
           value: "https://sdm-mcp.carlboettiger.info"
         - name: SDM_OUTPUT_DIR
           value: "/data/sdm-output"
+        - name: SDM_OUTPUT_S3
+          value: "s3://public-output/sdm"
+        # Host in the result links handed to clients. The pod itself writes and
+        # reads results through S3_DEFAULT_ENDPOINT.
+        - name: SDM_OUTPUT_S3_HTTP
+          value: "https://minio.carlboettiger.info"
+        # Public links to this store, read in-cluster as s3:// when given as
+        # occurrence GeoJSON. s3.carlboettiger.info is the RustFS host.
+        - name: SDM_S3_HTTPS_PREFIXES
+          value: "https://minio.carlboettiger.info/,https://s3.carlboettiger.info/"
         - name: SDM_DUCKDB_THREADS
           value: "32"
         # Same model thread caps as NRP (docs/benchmarks.md): more threads made

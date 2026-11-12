@@ -150,8 +150,10 @@ def fit_sdm(
             basis_of_record (list; default excludes fossils and living specimens),
             outlier_filter (default true: drop spatially isolated records,
             CoordinateCleaner cc_outl quantile rule).
-        {"geojson": <FeatureCollection of Points> or "https://...geojson"}
-            A feature property presence=0 marks a true absence.
+        {"geojson": <FeatureCollection of Points> or "https://...geojson" or "s3://bucket/...geojson"}
+            A feature property presence=0 marks a true absence. To pass a large file,
+            upload it to s3://public-output/ (anonymous write, 30-day scratch) and
+            give its s3:// path.
         {"points": [[lon, lat], ...], "absences": [[lon, lat], ...]}
     - algorithms: subset of bioclim, mahalanobis, glm, gam, maxent, brt, rf.
       Default ["rf", "glm"] (add "maxent" or "brt" for a larger ensemble).

@@ -80,3 +80,16 @@ def test_tokens_load_from_secret_shaped_dir(tmp_path):
     (tmp_path / "global-30x30").write_text("tok1\n")
     (tmp_path / "..data").mkdir()
     assert load_tokens(str(tmp_path)) == {"global-30x30": "tok1"}
+
+
+def test_s3_geojson_path_refuses_globs():
+    with pytest.raises(ValueError, match="single file"):
+        data._read_s3_geojson("s3://public-output/*.geojson")
+
+
+def test_public_https_prefix_maps_to_s3(monkeypatch):
+    monkeypatch.setattr(data, "S3_HTTPS_PREFIXES", ["https://minio.example.org/"])
+    assert data._as_s3_path("https://minio.example.org/public-output/x.geojson") == "s3://public-output/x.geojson"
+    assert data._as_s3_path("https://other.example.org/public-output/x.geojson") is None
+    assert data._as_s3_path("s3://b/k.geojson") == "s3://b/k.geojson"
+

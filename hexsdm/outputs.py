@@ -57,16 +57,23 @@ def public_url(rel: str) -> str:
     return f"{PUBLIC_BASE}/results/{rid}/{name}"
 
 
-def _s3_put(rel: str, body: bytes, content_type: str, gzipped: bool = False) -> None:
-    """Anonymous PUT to the deployment's S3 endpoint (public-output allows it in-cluster)."""
+def _s3_url(rel: str) -> str:
+    """URL of a stored file on the deployment's own S3 endpoint. Not public_url:
+    that names the public host, which in-cluster egress may refuse (cirrus)."""
     from .data import S3_ENDPOINT, S3_USE_SSL
     bucket, prefix = _s3_parts()
     scheme = "https" if S3_USE_SSL else "http"
+    return f"{scheme}://{S3_ENDPOINT}/{bucket}/{prefix + '/' if prefix else ''}{rel}"
+
+
+def _s3_put(rel: str, body: bytes, content_type: str, gzipped: bool = False) -> None:
+    """Anonymous PUT to the deployment's S3 endpoint (public-output allows it in-cluster)."""
+    _, prefix = _s3_parts()
     key = f"{prefix + '/' if prefix else ''}{rel}"
     headers = {"Content-Type": content_type}
     if gzipped:
         headers["Content-Encoding"] = "gzip"
-    req = urllib.request.Request(f"{scheme}://{S3_ENDPOINT}/{bucket}/{key}", data=body,
+    req = urllib.request.Request(_s3_url(rel), data=body,
                                  method="PUT", headers=headers)
     with urllib.request.urlopen(req, timeout=120) as r:
         if r.status >= 300:
@@ -112,7 +119,7 @@ def load_summary(rid: str) -> dict | None:
         return json.loads(p.read_text())
     if OUTPUT_S3:
         try:
-            with urllib.request.urlopen(public_url(f"{rid}/summary.json"), timeout=20) as r:
+            with urllib.request.urlopen(_s3_url(f"{rid}/summary.json"), timeout=20) as r:
                 s = json.loads(r.read())
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text(json.dumps(s))
