@@ -31,9 +31,8 @@ import pandas as pd
 
 OUTPUT_DIR = Path(os.environ.get("SDM_OUTPUT_DIR", "./sdm-output")).resolve()
 OUTPUT_S3 = os.environ.get("SDM_OUTPUT_S3", "").rstrip("/")
-# Where this server's own GET routes (/results, /map, /tiles) are reachable. Unset on NRP,
-# where the server has no public address: file links then point at S3, and no map link
-# is returned.
+# Where this server's own GET routes (/results, /map, /tiles) are reachable. When unset
+# and results are on S3, file links point at S3 and no map link is returned.
 PUBLIC_BASE_SET = bool(os.environ.get("SDM_PUBLIC_BASE_URL", "").strip())
 PUBLIC_BASE = os.environ.get("SDM_PUBLIC_BASE_URL", "").strip().rstrip("/") or "http://localhost:8001"
 S3_PUBLIC_HTTP = os.environ.get("SDM_OUTPUT_S3_HTTP", "https://s3-west.nrp-nautilus.io").rstrip("/")
