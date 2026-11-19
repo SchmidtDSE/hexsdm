@@ -7,7 +7,7 @@ nav_order: 1
 
 hexsdm is an MCP server that fits species distribution models (SDMs) on request. It takes occurrence records, by default from GBIF, and relates them to climate, terrain, land cover and human modification layers from the [boettiger-lab STAC catalog](https://s3-west.nrp-nautilus.io/public-data/stac/catalog.json). It returns a habitat suitability surface on the H3 grid, a modelled range, cross-validated performance, and optionally a projection under future climate.
 
-The NRP deployment has no public address. It requires a bearer token, and apps reach it through their own server-side proxy, which adds the token, so the token never reaches a browser.
+The NRP deployment is at `https://sdm-mcp.nrp-nautilus.io/mcp`. It requires a bearer token. Browser apps should reach it through their own server-side proxy, which adds the token, so the token never reaches a browser.
 
 ![California tiger salamander: ensemble suitability on H3 resolution 8, range polygon, GBIF presences and spatial cross-validation metrics](img/tiger-salamander.png)
 
@@ -34,7 +34,14 @@ Every step works on H3 cells. All input layers are already indexed at H3 resolut
 
 ## Connecting a client
 
-The deployed server takes requests only from apps in its own namespace that hold a token. global-30x30 is one: its nginx sends `/api/sdm` to the server's `/mcp` and adds the token. The app then lists that path as an optional second MCP endpoint in `layers-input.json`:
+Claude Code, with a token:
+
+```bash
+claude mcp add --transport http hex-sdm https://sdm-mcp.nrp-nautilus.io/mcp \
+  --header "Authorization: Bearer $SDM_MCP_TOKEN"
+```
+
+Browser apps go through a server-side proxy. global-30x30 is one: its nginx sends `/api/sdm` to the server's `/mcp` and adds the token. The app then lists that path as an optional second MCP endpoint in `layers-input.json`:
 
 ```json
 "mcp_servers": [
