@@ -67,6 +67,8 @@ MARINE_NOTES = [
     "Marine predictors are Bio-ORACLE v3.0 depth-mean and seafloor layers (2010s baseline) at H3 resolution 6. "
     "Depth-mean values average the whole water column, which fits surface-dwelling and bottom-dwelling species only approximately.",
     "For highly mobile species this climatological model shows broad habitat, not where animals are at a given time.",
+    "Marine records concentrate along coasts, ship tracks and survey cruises. Target-group background corrects "
+    "for this only when the target group is much broader than the species itself.",
 ]
 
 
