@@ -158,3 +158,11 @@ def test_connect_refuses_local_files_and_setting_changes():
         assert con.sql("SELECT h3_latlng_to_cell(37.8, -122.3, 8)").fetchone()[0] > 0
     finally:
         con.close()
+
+
+def test_pct_never_rounds_to_0_or_100():
+    assert pipeline._pct(0.0004, only=True) == "under 1%"
+    assert pipeline._pct(0.0) == "0%"
+    assert pipeline._pct(0.37, only=True) == "only 37%"
+    assert pipeline._pct(0.9996) == "over 99%"
+    assert pipeline._pct(1.0) == "100%"

@@ -35,6 +35,17 @@ MIN_LAND_SHARE = 0.5
 WARN_LAND_SHARE = 0.8
 
 
+def _pct(x: float, only: bool = False) -> str:
+    """A share as a percentage that never rounds a nonzero share to 0% or a
+    partial one to 100%: 'under 1%', 'over 99%', else e.g. '37%'
+    (with only=True, 'only 37%' but still 'under 1%')."""
+    if 0 < x < 0.005:
+        return "under 1%"
+    if 0.995 <= x < 1:
+        return "over 99%"
+    return f"only {x:.0%}" if only else f"{x:.0%}"
+
+
 def land_share(con, pres8, env_cells, res: int, dom: dict) -> tuple[int, int]:
     """(presence cells at `res` inside the study area, how many of them have covariates)."""
     con.register("_pres8", pres8)
@@ -178,25 +189,25 @@ def run(spec: dict, log=print) -> dict:
         occ_info["ocean_share"] = occ_info.pop("land_share")
         if n_inside and share < MIN_LAND_SHARE and not spec.get("allow_onshore"):
             raise ValueError(
-                f"only {share:.0%} of the {n_inside} occupied cells in the study area have marine "
+                f"{_pct(share, only=True)} of the {n_inside} occupied cells in the study area have marine "
                 "predictors (Bio-ORACLE ocean cells"
                 + (", within the depth range" if dr is not None else "") +
                 "), so this looks like a terrestrial or freshwater species, or the depth range excludes "
                 "most records. Use realm 'terrestrial', widen depth_range, or pass allow_onshore=true.")
         if n_inside and share < WARN_LAND_SHARE:
             occ_info["land_note"] = (
-                f"{1 - share:.0%} of the occupied cells in the study area lack marine predictors "
+                f"{_pct(1 - share).capitalize()} of the occupied cells in the study area lack marine predictors "
                 "(land, or outside the depth range) and were excluded.")
     elif n_inside and share < MIN_LAND_SHARE and not spec.get("allow_offshore"):
         raise ValueError(
-            f"only {share:.0%} of the {n_inside} occupied cells in the study area are on land. "
+            f"{_pct(share, only=True)} of the {n_inside} occupied cells in the study area are on land. "
             "This server's terrestrial predictors (CHELSA climate, terrain, land cover, human "
             "modification) cover land only, so the fit would describe only a coastal fringe. For a "
             "marine species use realm 'marine' (OBIS records and Bio-ORACLE predictors), or pass "
             "allow_offshore=true to fit the land cells anyway.")
     elif n_inside and share < WARN_LAND_SHARE:
         occ_info["land_note"] = (
-            f"{1 - share:.0%} of the occupied cells in the study area are offshore or otherwise "
+            f"{_pct(1 - share).capitalize()} of the occupied cells in the study area are offshore or otherwise "
             "lack land predictors and were excluded; the model describes only the land part of the "
             "species' distribution.")
     if len(pres_idx) < 5:
