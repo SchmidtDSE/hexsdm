@@ -38,7 +38,7 @@ spec:
                     values: ["us-west"]
       containers:
       - name: server
-        image: ghcr.io/schmidtdse/hexsdm:60277b0cd76cbf2d1ea06221a2206a3e8e81bb62@sha256:3c2e18c222e0cb0db471cad64c12fdf93544fcee8121cdc3a6119e8eaa51327d
+        image: ghcr.io/schmidtdse/hexsdm:3ea574bd91cd49c84aa108f71b5c4160d9141b7b@sha256:c8e07c21775bde7db67169691ee50b89666766de0d100bce58077b66cb545539
         imagePullPolicy: IfNotPresent
         env:
         # NRP Ceph through the internal RGW (plain http on port 80, which
