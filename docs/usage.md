@@ -89,7 +89,7 @@ Models are evaluated by spatial block cross-validation.
 | `status`, `run_id` | `done`, `running` or `failed`, and the cache key |
 | `mode` | `presence-background` or `presence-absence` |
 | `occurrences` | record and cell counts, the species' class and order, outlier cells removed, records dropped by the coordinate-uncertainty filter, and an `uncertainty_note` when that is more than a quarter of them; `presence_cells_in_domain`, `land_share` and, when under 80% of cells are on land, a `land_note` |
-| `domain`, `resolution`, `background_cells`, `background_bias` | the study area and sampling actually used |
+| `domain`, `resolution`, `background_cells`, `background_bias` | the study area and sampling actually used; `background_bias.species_share` is the species' own share of its target group's records |
 | `covariates`, `top_covariates` | predictors used, and the most important by permutation |
 | `final_model`, `ensemble_weights` | `ensemble` or the single algorithm, and member weights |
 | `cv_metrics` | AUC, Boyce and TSS for each model and the ensemble |
