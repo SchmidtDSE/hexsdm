@@ -1,9 +1,16 @@
 # Egress for sdm-mcp, the hexsdm MCP server (k8s/deployment.yaml).
 #
 # The server runs model fits and SQL on its callers' behalf, so what the pod can
-# reach is what a request can reach. It gets DNS and https to public addresses
-# (NRP S3 through its external endpoint, and public-output for results). Nothing
-# in the cluster.
+# reach is what a request can reach. It gets DNS and http(s) to public addresses.
+# Nothing in the cluster.
+#
+# NRP Ceph (reads, and result writes to public-output) goes through the internal
+# RGW, rook-ceph-rgw-nautiluss3.rook, on plain http port 80. Its pods use
+# hostNetwork, so after the Service address is translated the traffic goes to
+# RGW node IPs, which are public addresses: a rook namespace or pod-label rule
+# can't match them. As in geo-query's k8s/mcp-egress-networkpolicy.yaml, TCP 80
+# is allowed alongside 443 in the public-address rule (NRP's advice,
+# 2026-11-18). Private and in-cluster ranges stay closed.
 #
 # Keep public 443 rather than pinning to the NRP ingress address: pinning broke
 # reads on 2026-11-10.
@@ -52,3 +59,5 @@ spec:
       ports:
         - protocol: TCP
           port: 443
+        - protocol: TCP
+          port: 80
