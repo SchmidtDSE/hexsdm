@@ -390,6 +390,6 @@ ALGORITHM_INFO = {
            "summary": "Down-sampled (balanced) random forest: each tree sees equal presences and background.",
            "reference": "Valavi et al. 2021, https://doi.org/10.1111/ecog.05615"},
     "ensemble": {"data": "presence-background", "speed": "sum of members",
-                 "summary": "Weighted mean of member predictions, weights = cross-validated AUC - 0.5.",
+                 "summary": "Weighted mean of member predictions, each first converted to its rank among the study-area cells; weights = cross-validated AUC - 0.5.",
                  "reference": "Araújo & New 2007, https://doi.org/10.1016/j.tree.2006.09.010"},
 }

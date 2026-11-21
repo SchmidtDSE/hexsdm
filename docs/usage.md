@@ -53,6 +53,7 @@ A request with bias correction, a state study area and a 2050 projection:
 | `occurrences` | required | `{"gbif": {...}}`, `{"geojson": ...}`, or `{"points": [...], "absences": [...]}`. See [Data layers: occurrences](data-layers.md#occurrences). |
 | `algorithms` | `["rf", "glm"]` | any of `maxent`, `brt`, `rf`, `glm`, `gam`, `bioclim`, `mahalanobis`. See [Algorithms](algorithms.md). |
 | `ensemble` | `true` | combine the algorithms, weighted by cross-validated AUC − 0.5. With `false`, the first listed algorithm is the final model and the others are reported in `cv_metrics` only. |
+| `ensemble_scale` | `"rank"` | how member scores are put on one scale before averaging. `"rank"`: each model's score becomes the share of study-area cells it scores lower, so 0 is the lowest cell and values near 1 the highest. `"raw"`: the models' own 0–1 scores, as before v0.6.0. Pipeline option; not a served tool parameter. |
 | `covariates` | `["climate", "elevation", "landcover", "human_modification"]` | group names and custom layer objects. See [Data layers: covariates](data-layers.md#covariates). |
 | `domain` | `{"type": "buffer", "buffer_km": 100}` | `buffer`, `region`, `country` or `bbox`. See [Data layers: study area](data-layers.md#study-area). |
 | `resolution` | finest of 5–8 under 2 million cells | H3 resolution 5–8 |
