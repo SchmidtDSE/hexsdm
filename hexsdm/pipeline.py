@@ -72,6 +72,34 @@ MARINE_NOTES = [
 ]
 
 
+# A target group in which the species itself is most of the records samples
+# background where the species was recorded, which hides its habitat signal
+# (Mediterranean OBIS Testudines are almost all Caretta caretta: AUC 0.55 against
+# 0.77 with uniform background).
+TARGET_GROUP_MAX_SHARE = 0.5
+BROADER_RANK = {"genus": "family", "family": "order", "order": "class", "class": "phylum",
+                "phylum": "kingdom"}
+
+
+def target_group_note(effort: pd.DataFrame, rank: str, name: str,
+                      taxon: dict | None = None) -> str | None:
+    """A note when the species makes up most of its target group's records.
+    taxon gives the species' class and order where known; the note suggests the
+    next broader of those by name, or else asks for target_rank and target_name."""
+    if "own" not in effort or not len(effort) or effort["effort"].sum() <= 0:
+        return None
+    share = float(effort["own"].sum() / effort["effort"].sum())
+    if share <= TARGET_GROUP_MAX_SHARE:
+        return None
+    broader = BROADER_RANK.get(rank)
+    known = (taxon or {}).get(broader)
+    tip = (f"Try the {broader} {known} (target_rank '{broader}')" if known else
+           "Try a broader group, giving both target_rank and target_name,")
+    return (f"The species itself makes up {_pct(share)} of the {rank} {name} records in the study area, "
+            "so the target-group background mostly follows where this species was recorded and can "
+            f"hide its habitat signal. {tip} or uniform background (leave bias unset).")
+
+
 def normalize(spec: dict) -> dict:
     s = {**DEFAULTS, **{k: v for k, v in spec.items() if v is not None}}
     realm = spec.get("realm") or "terrestrial"
@@ -223,7 +251,7 @@ def run(spec: dict, log=print) -> dict:
     # 5. background
     effort = None
     bias = spec["background"].get("bias")
-    tg = None
+    tg = tg_note = None
     if bias == "target_group":
         rank = spec["background"].get("target_rank", "class")
         name = spec["background"].get("target_name") or occ_info.get(rank)
@@ -232,8 +260,13 @@ def run(spec: dict, log=print) -> dict:
         if not name:
             raise ValueError("target_group background needs target_name (or GBIF or OBIS occurrences)")
         effort = data.target_group_effort(con, rank, name, res,
-                                          source="obis" if occ_info.get("source") == "obis" else "gbif")
+                                          source="obis" if occ_info.get("source") == "obis" else "gbif",
+                                          species_sql=data.species_predicate(spec["occurrences"]))
         tg = {"rank": rank, "name": name, "cells_with_effort": int(len(effort))}
+        tg_note = target_group_note(effort, rank, name,
+                                    taxon={r: occ_info.get(r) for r in ("class", "order")})
+        if "own" in effort:
+            tg["species_share"] = round(float(effort["own"].sum() / effort["effort"].sum()), 3) if len(effort) else 0.0
         tick("target_group_effort")
     if abs_idx is not None and len(abs_idx) >= 5 and not spec["background"].get("add_background"):
         bg_idx, mode = abs_idx, "presence-absence"
@@ -374,6 +407,8 @@ def run(spec: dict, log=print) -> dict:
     }
     if occ_info.get("land_note"):
         summary["notes"].insert(1, occ_info["land_note"])
+    if tg and tg_note:
+        summary["notes"].insert(1, tg_note)
     if marine:
         summary["realm"] = "marine"
         summary["notes"][1:1] = MARINE_NOTES

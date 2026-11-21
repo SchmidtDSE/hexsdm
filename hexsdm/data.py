@@ -307,6 +307,26 @@ def _species_suggestions(con, name: str, limit: int = 5) -> list[str]:
     return [r[0] for r in rows]
 
 
+def species_predicate(occ: dict) -> str | None:
+    """SQL condition selecting the species' own records in the GBIF or OBIS hex
+    table, or None for user-supplied points."""
+    if "obis" in occ:
+        spec = occ["obis"]
+        if "aphiaid" in spec:
+            return f"aphiaid = {int(spec['aphiaid'])}"
+        if "species" in spec:
+            return f"species = {q(spec['species'])}"
+        raise ValueError("obis occurrences need 'species' or 'aphiaid'")
+    if "gbif" in occ:
+        spec = occ["gbif"]
+        if "specieskey" in spec:
+            return f"specieskey = {q(spec['specieskey'])}"
+        if "species" in spec:
+            return f"species = {q(spec['species'])}"
+        raise ValueError("gbif occurrences need 'species' or 'specieskey'")
+    return None
+
+
 def gbif_occurrences(con, spec: dict) -> tuple[pd.DataFrame, dict]:
     """Occurrence counts per h8 cell for a GBIF species, with standard quality filters.
 
@@ -315,12 +335,7 @@ def gbif_occurrences(con, spec: dict) -> tuple[pd.DataFrame, dict]:
     Returns (per-cell counts, info) where info reports how many records the
     coordinate-uncertainty filter removed.
     """
-    if "specieskey" in spec:
-        key = f"specieskey = {q(spec['specieskey'])}"
-    elif "species" in spec:
-        key = f"species = {q(spec['species'])}"
-    else:
-        raise ValueError("gbif occurrences need 'species' or 'specieskey'")
+    key = species_predicate({"gbif": spec})
     hit = con.sql(f"SELECT count(*) FROM read_parquet('{GBIF_SPECIES_INDEX}') WHERE {key}").fetchone()[0]
     if not hit:
         name = spec.get("species") or spec.get("specieskey")
@@ -517,12 +532,7 @@ def obis_occurrences(con, spec: dict) -> tuple[pd.DataFrame, dict]:
     max_year, max_uncertainty_m (default 1000), depth_range [min_m, max_m]
     (keeps records whose reported depth interval overlaps it, or that report none).
     """
-    if "aphiaid" in spec:
-        key = f"aphiaid = {int(spec['aphiaid'])}"
-    elif "species" in spec:
-        key = f"species = {q(spec['species'])}"
-    else:
-        raise ValueError("obis occurrences need 'species' or 'aphiaid'")
+    key = species_predicate({"obis": spec})
     where = [key]
     unc = float(spec.get("max_uncertainty_m", 1000))
     unc_ok = f"coordinateuncertaintyinmeters IS NULL OR coordinateuncertaintyinmeters <= {unc}"
@@ -709,14 +719,17 @@ def load_covariates(con, layers: list, res: int, dom: dict, period: str = "basel
     return df.reset_index(drop=True), cols_all
 
 
-def target_group_effort(con, rank: str, name: str, res: int, source: str = "gbif") -> pd.DataFrame:
+def target_group_effort(con, rank: str, name: str, res: int, source: str = "gbif",
+                        species_sql: str | None = None) -> pd.DataFrame:
     """Record counts for a whole taxonomic group per domain cell (sampling effort),
-    from GBIF or OBIS."""
+    from GBIF or OBIS. With species_sql (species_predicate), an 'own' column also
+    counts the species' own records among them."""
     if rank not in ("class", "order", "family", "phylum", "kingdom", "genus"):
         raise ValueError("target_group rank must be a Linnaean rank column")
+    own = f", count(*) FILTER (WHERE {species_sql})::DOUBLE AS own" if species_sql else ""
     if source == "obis":
         df = con.sql(f"""
-          SELECT h3_cell_to_parent(h8, {res}) AS cell, count(*)::DOUBLE AS effort
+          SELECT h3_cell_to_parent(h8, {res}) AS cell, count(*)::DOUBLE AS effort{own}
           FROM read_parquet('{OBIS_HEX}', hive_partitioning=true)
           WHERE h0 IN (SELECT h0 FROM dom0) AND h3_cell_to_parent(h8, 4) IN (SELECT h4 FROM dom4)
             AND "{rank}" = {q(name)}
@@ -725,7 +738,7 @@ def target_group_effort(con, rank: str, name: str, res: int, source: str = "gbif
         df["cell"] = df["cell"].astype("uint64")
         return df
     sql = f"""
-      SELECT h3_cell_to_parent(h8, {res}) AS cell, count(*)::DOUBLE AS effort
+      SELECT h3_cell_to_parent(h8, {res}) AS cell, count(*)::DOUBLE AS effort{own}
       FROM read_parquet('{GBIF_HEX}', hive_partitioning=true)
       WHERE h0 IN (SELECT h0 FROM dom0) AND h4 IN (SELECT h4 FROM dom4)
         AND "{rank}" = {q(name)}

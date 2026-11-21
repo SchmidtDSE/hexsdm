@@ -51,7 +51,7 @@ A marine fit is refused when under half of the occupied cells in the study area 
 
 - **Depth.** One 2-D set of predictors fits a 3-D habitat only approximately, and depth-mean values suit surface and bottom dwellers least well.
 - **Mobile species.** For highly mobile species such as sea turtles, cetaceans and tunas, a climatological model shows broad habitat, not where animals are at a given time. Dynamic models matched to the date of each record are the tool for that.
-- **Sampling bias.** Records concentrate along coasts, ship tracks and survey cruises. Target-group background corrects for this only when the target group is much broader than the species. Mediterranean OBIS turtle records are almost all loggerheads, so a turtle target group samples background where the loggerhead itself was recorded, and its AUC falls to about 0.55.
+- **Sampling bias.** Records concentrate along coasts, ship tracks and survey cruises. Target-group background corrects for this only when the target group is much broader than the species. Mediterranean OBIS turtle records are almost all loggerheads, so a turtle target group samples background where the loggerhead itself was recorded, and its AUC falls to about 0.55. Results flag this case with a note when the species makes up over half of its target group's records.
 
 ## Tests
 

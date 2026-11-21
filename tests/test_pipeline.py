@@ -166,3 +166,37 @@ def test_pct_never_rounds_to_0_or_100():
     assert pipeline._pct(0.37, only=True) == "only 37%"
     assert pipeline._pct(0.9996) == "over 99%"
     assert pipeline._pct(1.0) == "100%"
+
+
+def test_target_group_effort_counts_own_records(tmp_path, monkeypatch):
+    """The 'own' column counts the species' records among the target group's."""
+    import duckdb
+    c = h3.str_to_int(h3.latlng_to_cell(36.0, 15.0, 8))
+    h0 = h3.str_to_int(h3.cell_to_parent(h3.int_to_str(c), 0))
+    rows = pd.DataFrame({"h8": np.array([c] * 4, dtype="uint64"), "h0": h0,
+                         "order": "Testudines",
+                         "species": ["Caretta caretta"] * 3 + ["Chelonia mydas"]})
+    path = tmp_path / "obis.parquet"
+    rows.to_parquet(path)
+    monkeypatch.setattr(data, "OBIS_HEX", str(path))
+    con = duckdb.connect()
+    con.sql("LOAD h3")
+    con.execute("CREATE TABLE dom4 AS SELECT unnest(?::UBIGINT[]) AS h4",
+                [[h3.str_to_int(h3.cell_to_parent(h3.int_to_str(c), 4))]])
+    con.execute("CREATE TABLE dom0 AS SELECT unnest(?::BIGINT[]) AS h0", [[h0]])
+    pred = data.species_predicate({"obis": {"species": "Caretta caretta"}})
+    eff = data.target_group_effort(con, "order", "Testudines", 6, source="obis", species_sql=pred)
+    assert eff["effort"].sum() == 4 and eff["own"].sum() == 3
+    assert "own" not in data.target_group_effort(con, "order", "Testudines", 6, source="obis")
+
+
+def test_target_group_note_when_species_dominates():
+    eff = pd.DataFrame({"cell": [1, 2], "effort": [10.0, 10.0], "own": [9.0, 9.0]})
+    note = pipeline.target_group_note(eff, "order", "Squamata", {"class": "Reptilia", "order": "Squamata"})
+    assert "90%" in note and "class Reptilia (target_rank 'class')" in note
+    assert pipeline.target_group_note(eff.assign(own=[2.0, 2.0]), "order", "Squamata") is None
+    assert pipeline.target_group_note(eff.drop(columns="own"), "order", "Squamata") is None
+    # sea turtles: WoRMS gives no class, so the note asks for a rank and a name
+    turtle = pipeline.target_group_note(eff, "order", "Testudines", {"class": None, "order": "Testudines"})
+    assert "both target_rank and target_name" in turtle
+    assert data.species_predicate({"geojson": {}}) is None
