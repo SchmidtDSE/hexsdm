@@ -169,7 +169,9 @@ def fit_sdm(
       GBIF records of the same taxonomic group, correcting for sampling effort.
     - cv_folds: spatial block cross-validation folds (default 5; 0 skips CV).
     - threshold: "maxSSS" (default), "p10", "mtp", or a number, used for the range polygon.
-    - ensemble: combine algorithms weighted by CV AUC (default true).
+    - ensemble: combine algorithms weighted by CV AUC (default true). Each model's
+      score is converted to its rank among the study-area cells before averaging,
+      so ensemble suitability is relative to the study area (0 lowest, near 1 highest).
     - project_to: a future climate scenario, e.g. "chelsa-2-1-ssp585-2041-2070".
     - allow_offshore: all predictors are terrestrial, so a fit is refused when under
       half of the occupied cells in the study area are on land (marine species).

@@ -98,6 +98,26 @@ FROM r;
 - **New default.** From v0.4.0, RF + GLM is the default (`algorithms: ["rf", "glm"]`, CV-weighted). MaxEnt and BRT remain available.
 - **Caveat.** SGCN ranges are expert-drawn envelopes, not surveyed distributions. High AUC against them measures agreement with expert opinion, not predictive accuracy for occupancy.
 
+## Rank-scaled ensemble
+
+From v0.6.0 the ensemble averages each model's rank among the study-area cells instead of its raw score (#35). The models score on different scales: random forest votes bunch near 0 and 1, while the GLM gives smooth logistic probabilities. With raw scores, the forest therefore moved the average more than its CV weight implied. We compared the two scales on the seven test species with the default rf + glm ensemble over California at H3 resolution 8. Each cell gives the raw value, then the rank value.
+
+| Species | CV AUC | CV TSS | AUC against SGCN range | Suitable area in km² |
+|---|---|---|---|---|
+| *Actinemys marmorata* | 0.894 / 0.894 | 0.647 / 0.649 | 0.967 / 0.968 | 54,014 / 56,299 |
+| *Ambystoma californiense* | 0.965 / 0.966 | 0.818 / 0.833 | 0.960 / 0.961 | 19,881 / 27,551 |
+| *Dipodomys ingens* | 0.971 / 0.958 | 0.853 / 0.784 | 0.982 / 0.982 | 8,752 / 8,838 |
+| *Gambelia sila* | 0.963 / 0.966 | 0.870 / 0.866 | 0.986 / 0.984 | 17,160 / 17,208 |
+| *Phrynosoma blainvillii* | 0.934 / 0.928 | 0.766 / 0.747 | 0.912 / 0.917 | 39,898 / 42,224 |
+| *Spea hammondii* | 0.929 / 0.929 | 0.729 / 0.729 | 0.943 / 0.943 | 37,528 / 42,316 |
+| *Thamnophis gigas* | 0.961 / 0.962 | 0.872 / 0.877 | 0.980 / 0.983 | 12,721 / 12,654 |
+| Mean | 0.945 / 0.943 | 0.793 / 0.783 | 0.961 / 0.962 | 27,136 / 29,584 |
+
+- **Discrimination is unchanged.** Mean CV AUC moved by 0.002 and AUC against the expert ranges by 0.001. The largest change was *D. ingens*, with only 34 presence cells, where CV AUC fell from 0.971 to 0.958 and TSS from 0.853 to 0.784.
+- **Ranges grew by 9% on average.** The maxSSS threshold now falls on a different blend of the two models. The other six changed by 13% or less, but the *A. californiense* range grew by 39%, from 19,881 to 27,551 km².
+- **The CV Boyce index fell from 0.92 to 0.78, which reflects its windows rather than the models.** Boyce compares presences with background in fixed-width windows of the score, so it depends on the scale as well as the ordering. On rank scores the background spreads evenly over 0 to 1, and many low windows hold almost no presences. We converted the raw ensemble's own surface to ranks, which keeps every cell's order: its Boyce index against all study-area cells fell by the same amount (*A. californiense* 0.96 to 0.54), while its AUC was unchanged. Boyce values from v0.6.0 on are therefore not comparable with earlier ones.
+- **`ensemble_scale: "raw"`** restores the earlier behaviour for comparison. `benchmarks/ensemble_scale.py` reproduces this table.
+
 ## Compute profile on the NRP deployment
 
 This profile is for the default run on the production pod (8 model threads, OpenBLAS 4): tiger salamander, 255,074 res-8 cells, 201 presence cells, 20,000 background cells, 18 covariates. Script: `benchmarks/profile_pipeline.py`.

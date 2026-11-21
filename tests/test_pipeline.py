@@ -200,3 +200,21 @@ def test_target_group_note_when_species_dominates():
     turtle = pipeline.target_group_note(eff, "order", "Testudines", {"class": None, "order": "Testudines"})
     assert "both target_rank and target_name" in turtle
     assert data.species_predicate({"geojson": {}}) is None
+
+
+def test_rank_scale():
+    f = pipeline.rank_scale(np.array([0.0, 0.0, 0.2, 0.5, 0.9]))
+    assert np.allclose(f(np.array([0.0, 0.2, 0.9, 1.5])), [0.0, 0.4, 0.8, 1.0])
+    out = f(np.array([np.nan, 0.5]))
+    assert np.isnan(out[0]) and out[1] == 0.6
+    # monotone, so each member's AUC is unchanged
+    p, b = np.array([0.9, 0.5]), np.array([0.2, 0.0])
+    assert evaluate.auc(f(p), f(b)) == evaluate.auc(p, b)
+
+
+def test_ensemble_scale_option():
+    base = {"occurrences": {"gbif": {"species": "X y"}}}
+    assert pipeline.normalize(base)["ensemble_scale"] == "rank"
+    assert pipeline.normalize({**base, "ensemble_scale": "raw"})["ensemble_scale"] == "raw"
+    with pytest.raises(ValueError):
+        pipeline.normalize({**base, "ensemble_scale": "zscore"})

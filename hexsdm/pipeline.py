@@ -11,7 +11,7 @@ import pandas as pd
 from . import data, evaluate, outputs
 from .models import ALGORITHMS
 
-VERSION = "0.5.0"  # part of the cache key: bump when results would change
+VERSION = "0.6.0"  # part of the cache key: bump when results would change
 DEFAULTS = {
     "algorithms": ["rf", "glm"],
     "covariates": ["climate", "elevation", "landcover", "human_modification"],
@@ -21,6 +21,7 @@ DEFAULTS = {
     "cv_folds": 5,
     "threshold": "maxSSS",
     "ensemble": True,
+    "ensemble_scale": "rank",
     "project_to": None,
     "max_cells": 2_000_000,
     "seed": 1,
@@ -126,6 +127,8 @@ def normalize(spec: dict) -> dict:
         if "seafloor" not in s["covariates"]:
             raise ValueError("domain.depth_range needs the 'seafloor' covariate group (for depth)")
     s["background"] = {**DEFAULTS["background"], **(spec.get("background") or {})}
+    if s["ensemble_scale"] not in ("rank", "raw"):
+        raise ValueError("ensemble_scale must be 'rank' or 'raw'")
     unknown = [a for a in s["algorithms"] if a not in ALGORITHMS]
     if unknown:
         raise ValueError(f"unknown algorithms {unknown}; choose from {list(ALGORITHMS)}")
@@ -137,6 +140,26 @@ def normalize(spec: dict) -> dict:
 def run_id(spec: dict) -> str:
     blob = json.dumps({"v": VERSION, **spec}, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def rank_scale(ref: np.ndarray):
+    """A function mapping a model's scores to the share of study-area cells
+    (ref, that model's predictions on every cell) scoring strictly lower.
+
+    Ensemble members give scores on different scales (logistic probabilities,
+    cloglog, tree votes, envelope similarity), so the ensemble averages these
+    ranks rather than raw scores (#35). Ties at the bottom, such as BIOCLIM's
+    zeros outside the envelope, stay at 0. The same reference rescales
+    out-of-fold and future predictions, so they share the present scale."""
+    ref = np.sort(np.asarray(ref, dtype=np.float64))
+    ref = ref[~np.isnan(ref)]
+    n = max(len(ref), 1)
+
+    def f(v):
+        v = np.asarray(v, dtype=np.float64)
+        out = np.searchsorted(ref, v, side="left") / n
+        return np.where(np.isnan(v), np.nan, out)
+    return f
 
 
 def _sample_background(env: pd.DataFrame, n: int, effort: pd.DataFrame | None, rng) -> np.ndarray:
@@ -316,10 +339,14 @@ def run(spec: dict, log=print) -> dict:
             weights = {a: 1.0 for a in algos}
         tot = sum(weights.values()) or 1.0
         weights = {a: w / tot for a, w in weights.items()}
-        final = sum(weights[a] * preds[a] for a in algos)
+        if spec["ensemble_scale"] == "rank":
+            scale = {a: rank_scale(preds[a]) for a in algos}
+        else:
+            scale = {a: (lambda v: v) for a in algos}
+        final = sum(weights[a] * scale[a](preds[a]) for a in algos).astype(np.float32)
         final_name = "ensemble"
         if cv:
-            oof_ens = sum(weights[a] * oof[a] for a in algos)
+            oof_ens = sum(weights[a] * scale[a](oof[a]) for a in algos)
             ok = ~np.isnan(oof_ens)
             cv["ensemble"] = {kk: round(v, 4) for kk, v in evaluate.metrics(oof_ens[ok & (y == 1)], oof_ens[ok & (y == 0)]).items()}
     else:
@@ -356,7 +383,8 @@ def run(spec: dict, log=print) -> dict:
         envf, colsf = data.load_covariates(con, spec["covariates"], res, dom, period=period)
         Xf = envf[cols].to_numpy(dtype=np.float64)
         pf = {a: models[a].predict(Xf).astype(np.float32) for a in algos}
-        ff = sum(weights[a] * pf[a] for a in algos) if weights else pf[algos[0]]
+        ff = (sum(weights[a] * scale[a](pf[a]) for a in algos).astype(np.float32)
+              if weights else pf[algos[0]])
         proj_df = pd.DataFrame({"cell": envf["cell"].to_numpy(), "suitability": ff.astype(np.float32),
                                 "suitable": ff >= thr,
                                 "n_extrapolated": ((Xf < lo) | (Xf > hi)).sum(1).astype(np.int8)})
@@ -401,7 +429,10 @@ def run(spec: dict, log=print) -> dict:
              "bias was applied." if mode == "presence-background" else
              "Absences: user-supplied absence records were used instead of background cells."),
             "TSS and AUC are presence vs background unless mode is presence-absence.",
-            "Suitability is relative (cloglog-scale for maxent); not an occupancy probability.",
+            ("Suitability is the AUC-weighted mean of each model's rank among the study-area cells "
+             "(0 = lowest, near 1 = highest), so it is relative to this study area; not an occupancy probability."
+             if final_name == "ensemble" and spec["ensemble_scale"] == "rank" else
+             "Suitability is relative (cloglog-scale for maxent); not an occupancy probability."),
             "n_extrapolated counts covariates outside the training range in each cell.",
         ],
     }
