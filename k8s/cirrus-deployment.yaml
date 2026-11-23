@@ -54,8 +54,8 @@ spec:
           type: RuntimeDefault
       containers:
       - name: server
-        # Built from 2a9e4c5 (#24). Pinned by digest.
-        image: ghcr.io/schmidtdse/hexsdm:2a9e4c53002d7dbe4610b1f346583863cb0fb359@sha256:d13aa01fb98d82a14d99bafe9888cd931dce3e6633c1656e4a00e2417dbc3ea5
+        # Built from 45de9e0 (#36), same image as NRP. Pinned by digest.
+        image: ghcr.io/schmidtdse/hexsdm:45de9e0e701c58a18eda94095e73f5599973d72e@sha256:aab327078ea86869fc2ca8ef451fa8f48d5a2ef1a5e21d642c5dcef9009ec1dd
         imagePullPolicy: IfNotPresent
         env:
         # In-cluster RustFS (rustfs-s3, MinIO's replacement): bare host, plain
