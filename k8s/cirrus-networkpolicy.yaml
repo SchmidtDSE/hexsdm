@@ -3,17 +3,14 @@
 #
 # The server runs model fits and SQL on its callers' behalf, so what the pod can
 # reach is what a request can reach. Egress: cluster DNS and the in-cluster
-# MinIO S3 API, nothing else. Not the internet, not other in-cluster services,
-# not the public minio.carlboettiger.info host. Occurrence GeoJSON therefore
-# comes inline, as an s3:// path, or as a minio.carlboettiger.info link (read
-# in-cluster); other https URLs cannot be fetched here.
+# RustFS S3 API (rustfs-s3), nothing else. Not the internet, not other
+# in-cluster services, not the public s3./minio.carlboettiger.info hosts.
+# Occurrence GeoJSON therefore comes inline, as an s3:// path, or as an
+# s3.carlboettiger.info (or legacy minio.) link, read in-cluster; other https
+# URLs cannot be fetched here.
 #
 # Ingress: only Traefik (kube-system) on 8000. Kubelet probes come from the node
 # itself, which kube-router always admits.
-#
-# RustFS cutover: MinIO's in-cluster Service and pod label go away. Replace the
-# MinIO rule with the commented RustFS rule below, together with
-# S3_DEFAULT_ENDPOINT in cirrus-deployment.yaml.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -50,19 +47,8 @@ spec:
       protocol: UDP
     - port: 53
       protocol: TCP
-  # MinIO S3 API only (the console on 9090 is excluded).
-  - to:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: minio
-      podSelector:
-        matchLabels:
-          k8s-app: minio-app
-    ports:
-    - port: 9000
-      protocol: TCP
-  # rustfs-s3, MinIO's replacement (boettiger-lab/k8s platform/rustfs). At the
-  # cutover minio-svc becomes an alias of it, so this rule must be in place first.
+  # rustfs-s3 S3 API only (the console on 9001 is excluded). MinIO's
+  # replacement (boettiger-lab/k8s platform/rustfs).
   - to:
     - namespaceSelector:
         matchLabels:
@@ -73,14 +59,3 @@ spec:
     ports:
     - port: 9000
       protocol: TCP
-  # After the RustFS cutover, in place of the MinIO rule:
-  # - to:
-  #   - namespaceSelector:
-  #       matchLabels:
-  #         kubernetes.io/metadata.name: rustfs
-  #     podSelector:
-  #       matchLabels:
-  #         app: rustfs-s3
-  #   ports:
-  #   - port: 9000
-  #     protocol: TCP
