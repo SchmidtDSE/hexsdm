@@ -55,7 +55,7 @@ spec:
       containers:
       - name: server
         # Built from 45de9e0 (#36), same image as NRP. Pinned by digest.
-        image: ghcr.io/schmidtdse/hexsdm:45de9e0e701c58a18eda94095e73f5599973d72e@sha256:aab327078ea86869fc2ca8ef451fa8f48d5a2ef1a5e21d642c5dcef9009ec1dd
+        image: ghcr.io/schmidtdse/hexsdm:7ba333c730c2c0dbb784491e5bb46ed559e78ece@sha256:8da4514fef758ac21a6893e923d81139982c6d579e7642c09e9e7f1fac516c05
         imagePullPolicy: IfNotPresent
         env:
         # In-cluster RustFS (rustfs-s3, MinIO's replacement): bare host, plain
