@@ -218,3 +218,18 @@ def test_ensemble_scale_option():
     assert pipeline.normalize({**base, "ensemble_scale": "raw"})["ensemble_scale"] == "raw"
     with pytest.raises(ValueError):
         pipeline.normalize({**base, "ensemble_scale": "zscore"})
+
+
+def test_block_cv_with_too_few_presences_trains_no_fold():
+    # 5 presences: any fold holding one leaves only 4 to train on (issue #40)
+    rng = np.random.default_rng(0)
+    X = rng.normal(size=(105, 3))
+    y = np.r_[np.ones(5), np.zeros(100)]
+    folds = np.r_[np.arange(5) % 3, rng.integers(0, 3, 100)]
+    oof, n = pipeline._block_cv(X, y, folds, 3, ["glm"], {})
+    assert n == 0 and np.isnan(oof["glm"]).all()
+
+    y = np.r_[np.ones(20), np.zeros(85)]
+    folds = np.r_[np.arange(20) % 3, rng.integers(0, 3, 85)]
+    oof, n = pipeline._block_cv(X, y, folds, 3, ["glm"], {})
+    assert n == 3 and not np.isnan(oof["glm"]).any()
