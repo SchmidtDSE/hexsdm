@@ -187,6 +187,24 @@ def _perm_importance(model, X, y, cols, rng, base_auc):
     return out
 
 
+
+def _block_cv(X: np.ndarray, y: np.ndarray, folds: np.ndarray, k: int, algos: list,
+              hints: dict) -> tuple[dict, int]:
+    """Out-of-fold predictions from spatial block CV.
+
+    A fold is skipped when it holds no presences or leaves fewer than 5 to train on;
+    returns the predictions (NaN where no fold predicted) and how many folds were trained."""
+    oof = {a: np.full(len(y), np.nan) for a in algos}
+    n_trained = 0
+    for f in range(k):
+        te = folds == f
+        if y[te].sum() == 0 or y[~te].sum() < 5:
+            continue
+        n_trained += 1
+        for a in algos:
+            oof[a][te] = ALGORITHMS[a](**hints.get(a, {})).fit(X[~te], y[~te]).predict(X[te])
+    return oof, n_trained
+
 def run(spec: dict, log=print) -> dict:
     spec = normalize(spec)
     rid = run_id(spec)
@@ -315,20 +333,22 @@ def run(spec: dict, log=print) -> dict:
     # 7. spatial block CV (BRT reuses the full-data tree count instead of nesting a CV)
     hints = {"brt": {"n_trees": getattr(models.get("brt"), "n_trees", None)}}
     cv = {}
+    cv_skipped = None
     k = int(spec["cv_folds"] or 0)
     if k >= 2:
         folds, block_res = evaluate.spatial_blocks(cells_tr, env["cell"].to_numpy()[pres_idx], k, spec["seed"])
-        oof = {a: np.full(len(y), np.nan) for a in algos}
-        for f in range(k):
-            te = folds == f
-            if y[te].sum() == 0 or y[~te].sum() < 5:
-                continue
+        oof, n_trained = _block_cv(X, y, folds, k, algos, hints)
+        ok = ~np.isnan(oof[algos[0]])
+        if n_trained and (ok & (y == 1)).any() and (ok & (y == 0)).any():
             for a in algos:
-                oof[a][te] = ALGORITHMS[a](**hints.get(a, {})).fit(X[~te], y[~te]).predict(X[te])
-        for a in algos:
-            ok = ~np.isnan(oof[a])
-            cv[a] = {kk: round(v, 4) for kk, v in evaluate.metrics(oof[a][ok & (y == 1)], oof[a][ok & (y == 0)]).items()}
-        cv["_blocks"] = {"folds": k, "block_h3_res": block_res}
+                ok = ~np.isnan(oof[a])
+                cv[a] = {kk: round(v, 4) for kk, v in evaluate.metrics(oof[a][ok & (y == 1)], oof[a][ok & (y == 0)]).items()}
+            cv["_blocks"] = {"folds": k, "block_h3_res": block_res}
+        else:
+            cv_skipped = (
+                f"Spatial cross-validation was not possible: with {int(y.sum())} presence cells in "
+                f"{k} spatial folds, no fold could be held out while keeping the 5 presences needed "
+                "to train a model. No CV metrics are reported, and ensemble models are weighted equally.")
         tick("cross_validation")
 
     weights = None
@@ -436,6 +456,9 @@ def run(spec: dict, log=print) -> dict:
             "n_extrapolated counts covariates outside the training range in each cell.",
         ],
     }
+    if cv_skipped:
+        summary["cv_skipped"] = cv_skipped
+        summary["notes"].insert(1, cv_skipped)
     if occ_info.get("land_note"):
         summary["notes"].insert(1, occ_info["land_note"])
     if tg and tg_note:
